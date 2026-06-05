@@ -5,6 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mockMessages: ChatMessage[] = [{ role: "user", content: "Hello" }];
 const mockLanguage: Language = "en";
 
+function makeStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      controller.close();
+    },
+  });
+}
+
 describe("streamChat", () => {
   beforeEach(() => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key-123");
@@ -12,17 +22,14 @@ describe("streamChat", () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
-    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("throws OpenRouterError with code unauthorized on 401", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 401,
-        statusText: "Unauthorized",
-      }),
+      vi.fn().mockResolvedValue({ ok: false, status: 401, statusText: "Unauthorized" }),
     );
 
     await expect(streamChat(mockMessages, mockLanguage).next()).rejects.toMatchObject({
@@ -30,29 +37,57 @@ describe("streamChat", () => {
     });
   });
 
-  it("throws OpenRouterError with code rate_limited on 429", async () => {
+  it("throws OpenRouterError with code rate_limited after exhausting retries", async () => {
+    // Make all sleeps instant so the test doesn't take 21 seconds
+    vi.spyOn(global, "setTimeout").mockImplementation((fn) => {
+      (fn as () => void)();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 429,
-        statusText: "Too Many Requests",
-      }),
+      vi.fn().mockResolvedValue({ ok: false, status: 429, statusText: "Too Many Requests" }),
     );
 
-    await expect(streamChat(mockMessages, mockLanguage).next()).rejects.toMatchObject({
-      code: "rate_limited",
+    const collectAll = async () => {
+      for await (const _ of streamChat(mockMessages, mockLanguage)) {
+        /* drain */
+      }
+    };
+
+    await expect(collectAll()).rejects.toMatchObject({ code: "rate_limited" });
+  });
+
+  it("retries on 429 and succeeds on second attempt", async () => {
+    vi.spyOn(global, "setTimeout").mockImplementation((fn) => {
+      (fn as () => void)();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
     });
+
+    const stream = makeStream([
+      'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+      "data: [DONE]\n\n",
+    ]);
+
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 429, statusText: "Too Many Requests" })
+      .mockResolvedValue({ ok: true, body: stream });
+    vi.stubGlobal("fetch", mockFetch);
+
+    const chunks: string[] = [];
+    for await (const chunk of streamChat(mockMessages, mockLanguage)) {
+      chunks.push(chunk);
+    }
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(chunks).toEqual(["Hello"]);
   });
 
   it("throws OpenRouterError with code api_error on other HTTP errors", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        statusText: "Internal Server Error",
-      }),
+      vi.fn().mockResolvedValue({ ok: false, status: 500, statusText: "Internal Server Error" }),
     );
 
     await expect(streamChat(mockMessages, mockLanguage).next()).rejects.toMatchObject({
@@ -69,29 +104,13 @@ describe("streamChat", () => {
   });
 
   it("yields text chunks from SSE stream", async () => {
-    const sseChunks = [
+    const stream = makeStream([
       'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
       'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
       "data: [DONE]\n\n",
-    ];
+    ]);
 
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        for (const chunk of sseChunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    });
-
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        body: stream,
-      }),
-    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, body: stream }));
 
     const chunks: string[] = [];
     for await (const chunk of streamChat(mockMessages, mockLanguage)) {
@@ -102,21 +121,11 @@ describe("streamChat", () => {
   });
 
   it("skips SSE lines without content delta", async () => {
-    const sseChunks = [
+    const stream = makeStream([
       'data: {"choices":[{"delta":{}}]}\n\n',
       'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
       "data: [DONE]\n\n",
-    ];
-
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        for (const chunk of sseChunks) {
-          controller.enqueue(encoder.encode(chunk));
-        }
-        controller.close();
-      },
-    });
+    ]);
 
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, body: stream }));
 

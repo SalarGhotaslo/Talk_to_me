@@ -14,42 +14,57 @@ function makeError(code: OpenRouterError["code"], message: string): OpenRouterEr
   return { code, message };
 }
 
+const MAX_RETRIES = 3;
+const RETRY_DELAYS_MS = [3000, 6000, 12000];
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function callOpenRouter(
   messages: ChatMessage[],
   language: Language,
 ): Promise<Response> {
   const apiKey = process.env.OPENROUTER_API_KEY;
 
-  let response: Response;
-  try {
-    response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-        "X-Title": "Talk To Me",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        stream: true,
-        messages: [
-          { role: "system", content: buildSystemPrompt(language) },
-          ...messages.map((m) => ({ role: m.role, content: m.content })),
-        ],
-      }),
-    });
-  } catch {
-    throw makeError("network_error", "Failed to reach OpenRouter");
-  }
+  const body = JSON.stringify({
+    model: MODEL,
+    stream: true,
+    messages: [
+      { role: "system", content: buildSystemPrompt(language) },
+      ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ],
+  });
 
-  if (!response.ok) {
+  const headers = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    "X-Title": "Talk To Me",
+  };
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch(OPENROUTER_URL, { method: "POST", headers, body });
+    } catch {
+      throw makeError("network_error", "Failed to reach OpenRouter");
+    }
+
+    if (response.ok) return response;
+
     if (response.status === 401) throw makeError("unauthorized", "Invalid API key");
-    if (response.status === 429) throw makeError("rate_limited", "Rate limit exceeded");
+    if (response.status === 429) {
+      if (attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAYS_MS[attempt] ?? 12000);
+        continue;
+      }
+      throw makeError("rate_limited", "Rate limit exceeded — please try again in a moment");
+    }
     throw makeError("api_error", `OpenRouter error: ${response.statusText}`);
   }
 
-  return response;
+  throw makeError("api_error", "Unexpected end of retry loop");
 }
 
 export async function* parseSSEStream(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {

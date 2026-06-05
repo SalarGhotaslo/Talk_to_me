@@ -6,7 +6,7 @@ import { LanguageSelector } from "@/components/LanguageSelector";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
 import { isSTTSupported, isTTSSupported, startListening } from "@/lib/speech";
 import type { ConversationState, Language, Message } from "@/types";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const INITIAL_STATE: ConversationState = {
   messages: [],
@@ -18,10 +18,18 @@ export default function HomePage() {
   const [state, setState] = useState<ConversationState>(INITIAL_STATE);
   const [stopListening, setStopListening] = useState<(() => void) | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Start as null (unknown) to avoid SSR/hydration mismatch — isSTTSupported()
+  // calls window APIs which don't exist on the server.
+  const [sttSupported, setSTTSupported] = useState<boolean | null>(null);
+  const [ttsSupported, setTTSSupported] = useState<boolean | null>(null);
 
-  const sttSupported = isSTTSupported();
-  const ttsSupported = isTTSSupported();
-  const browserSupported = sttSupported;
+  useEffect(() => {
+    setSTTSupported(isSTTSupported());
+    setTTSSupported(isTTSSupported());
+  }, []);
+
+  // null = still hydrating; render main layout (optimistic) to match server HTML
+  const browserSupported = sttSupported !== false;
 
   const handleLanguageChange = useCallback((language: Language) => {
     setState((prev) => ({ ...prev, language }));
@@ -178,7 +186,7 @@ export default function HomePage() {
         <ConversationView messages={state.messages} />
       </section>
 
-      {!ttsSupported && (
+      {ttsSupported === false && (
         <output className="px-6 py-2 text-center text-xs text-amber-600">
           Voice output is not available in this browser.
         </output>

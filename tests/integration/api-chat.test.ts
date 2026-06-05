@@ -98,7 +98,12 @@ describe("POST /api/chat", () => {
     expect(res.status).toBe(401);
   });
 
-  it("returns 429 when OpenRouter is rate limited", async () => {
+  it("returns 429 when OpenRouter is rate limited after retries", async () => {
+    vi.spyOn(global, "setTimeout").mockImplementation((fn) => {
+      (fn as () => void)();
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, status: 429, statusText: "Too Many Requests" }),

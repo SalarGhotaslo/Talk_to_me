@@ -9,7 +9,11 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./tests/setup.ts"],
     passWithNoTests: true,
-    include: ["tests/**/*.{test,spec}.{ts,tsx}", "src/**/*.{test,spec}.{ts,tsx}"],
+    include: [
+      "tests/unit/**/*.{test,spec}.{ts,tsx}",
+      "tests/integration/**/*.{test,spec}.{ts,tsx}",
+      "src/**/*.{test,spec}.{ts,tsx}",
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html", "lcov"],
