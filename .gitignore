@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+
+# Editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/settings.json
+
+# Claude Code
+.claude/settings.local.json
