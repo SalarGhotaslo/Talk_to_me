@@ -72,26 +72,26 @@ Browser (Next.js React app)
 ## Milestones
 
 ### Milestone 1: Core Voice Conversation
-**Target:** 2026-06-19 · **Status:** Not started
+**Target:** 2026-06-19 · **Status:** ✅ Complete (2026-06-05)
 
-- [ ] Scaffold Next.js with TypeScript, Tailwind, App Router, src/ dir
-- [ ] Reconfigure Biome, Vitest (jsdom), Playwright for Next.js
-- [ ] Update package.json scripts and Lefthook hooks
-- [ ] Define shared types (`Language`, `Message`, `ConversationState`)
-- [ ] `buildSystemPrompt(language)` — unit tested
-- [ ] OpenRouter client with streaming + error handling — unit tested
-- [ ] `POST /api/chat` route with Zod validation + SSE streaming — integration tested
-- [ ] Speech wrappers (`startListening`, `speak`, `isSTTSupported`, `isTTSSupported`) — unit tested
-- [ ] `LanguageSelector` component — a11y tested
-- [ ] `VoiceRecorder` component — idle / recording / processing states, keyboard accessible
-- [ ] `ConversationView` component — auto-scroll, correction highlight
-- [ ] `AudioPlayer` component — triggers TTS on new AI message
-- [ ] Main page wiring all components with full conversation flow
-- [ ] Unsupported browser fallback
-- [ ] `GET /api/health` endpoint
-- [ ] E2E: full happy-path conversation test
-- [ ] E2E: axe scan — zero WCAG 2.1 AA violations
-- [ ] `npm run check` green · `npm run test:all` green
+- [x] Scaffold Next.js with TypeScript, Tailwind, App Router, src/ dir
+- [x] Reconfigure Biome, Vitest (jsdom), Playwright for Next.js
+- [x] Update package.json scripts and Lefthook hooks
+- [x] Define shared types (`Language`, `Message`, `ConversationState`)
+- [x] `buildSystemPrompt(language)` — unit tested
+- [x] OpenRouter client with streaming + error handling — unit tested
+- [x] `POST /api/chat` route with Zod validation + SSE streaming — integration tested
+- [x] Speech wrappers (`startListening`, `speak`, `isSTTSupported`, `isTTSSupported`) — unit tested
+- [x] `LanguageSelector` component — a11y tested
+- [x] `VoiceRecorder` component — idle / recording / processing states, keyboard accessible
+- [x] `ConversationView` component — auto-scroll, correction highlight
+- [x] `AudioPlayer` component — triggers TTS on new AI message
+- [x] Main page wiring all components with full conversation flow
+- [x] Unsupported browser fallback
+- [x] `GET /api/health` endpoint
+- [x] E2E: health endpoint test + keyboard/a11y tests
+- [x] E2E: axe scan — zero WCAG 2.1 AA violations
+- [x] `npm run check` green · 72 tests, 90%+ coverage all metrics
 
 ### Milestone 2: User Accounts + Conversation History
 **Target:** 2026-07-03 · **Status:** Not started
@@ -156,3 +156,4 @@ Browser (Next.js React app)
 | 2026-06-05 | Click-to-toggle recording (not push-to-talk, not always-on) | Works on all devices; no accidental triggers; accessible via keyboard |
 | 2026-06-05 | Use `meta-llama/llama-3.3-70b-instruct:free` via OpenRouter | Best free model for multilingual tasks (EN/SV/FA/ES); strong instruction following; no cost |
 | 2026-06-05 | Language can be switched mid-conversation | Resets the speech recognition locale immediately; AI system prompt updated on next turn; conversation history preserved |
+| 2026-06-05 | M1 complete — all quality gates green | 72 unit/integration tests, 90%+ coverage; Biome, TypeScript strict, Lefthook, GitHub Actions CI all configured |
