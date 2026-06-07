@@ -9,12 +9,15 @@ describe("LanguageSelector", () => {
     expect(screen.getByLabelText("Language")).toBeInTheDocument();
   });
 
-  it("shows all four language options", () => {
+  it("shows all seven language options", () => {
     render(<LanguageSelector value="en" onChange={vi.fn()} />);
     expect(screen.getByRole("option", { name: "English" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Swedish" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Farsi" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Spanish" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Turkish" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "French" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Dutch" })).toBeInTheDocument();
   });
 
   it("reflects the current language value", () => {

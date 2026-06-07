@@ -1,4 +1,13 @@
-export type Language = "en" | "sv" | "fa" | "es";
+export type Language = "en" | "sv" | "fa" | "es" | "tr" | "fr" | "nl";
+
+export type Topic =
+  | "free"
+  | "restaurant"
+  | "travel"
+  | "shopping"
+  | "business"
+  | "introductions"
+  | "hobbies";
 
 export type Message = {
   id: string;
@@ -13,6 +22,7 @@ export type ConversationState = {
   messages: Message[];
   language: Language;
   recordingState: RecordingState;
+  topic: Topic;
 };
 
 export type OpenRouterError = {

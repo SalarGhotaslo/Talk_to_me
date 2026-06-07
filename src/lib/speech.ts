@@ -5,6 +5,9 @@ const LANG_BCP47: Record<Language, string> = {
   sv: "sv-SE",
   fa: "fa-IR",
   es: "es-ES",
+  tr: "tr-TR",
+  fr: "fr-FR",
+  nl: "nl-NL",
 };
 
 type WindowWithSpeech = Window & {
@@ -22,10 +25,17 @@ export function isTTSSupported(): boolean {
   return typeof window !== "undefined" && Boolean(window.speechSynthesis);
 }
 
+const SENTENCE_END = /([.!?])(\s|$)/g;
+
+export function prepareForTTS(text: string): string {
+  return text.trim().replace(SENTENCE_END, "$1   $2");
+}
+
 export function startListening(
   language: Language,
   onResult: (transcript: string) => void,
   onEnd: () => void,
+  silenceTimeout = 3000,
 ): () => void {
   const w = window as WindowWithSpeech;
   const SpeechRecognitionCtor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
@@ -37,27 +47,94 @@ export function startListening(
 
   const recognition = new SpeechRecognitionCtor();
   recognition.lang = LANG_BCP47[language];
-  recognition.continuous = false;
-  recognition.interimResults = false;
+  recognition.continuous = true;
+  recognition.interimResults = true;
 
-  recognition.onresult = (event: SpeechRecognitionEvent) => {
-    const result = event.results[event.resultIndex];
-    const transcript = result?.[0]?.transcript ?? "";
-    if (transcript) onResult(transcript);
+  let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  let finalTranscript = "";
+
+  const clearTimer = () => {
+    if (silenceTimer !== null) {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+    }
   };
 
-  recognition.onend = onEnd;
+  recognition.onresult = (event: SpeechRecognitionEvent) => {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (result?.isFinal) {
+        const alt = result[0];
+        if (alt) finalTranscript = alt.transcript;
+      }
+    }
+    clearTimer();
+    silenceTimer = setTimeout(() => {
+      recognition.stop();
+      if (finalTranscript) onResult(finalTranscript);
+    }, silenceTimeout);
+  };
+
+  recognition.onend = () => {
+    clearTimer();
+    onEnd();
+  };
 
   recognition.onerror = () => {
+    clearTimer();
     onEnd();
   };
 
   recognition.start();
 
-  return () => recognition.stop();
+  return () => {
+    clearTimer();
+    recognition.stop();
+  };
 }
 
-export function speak(text: string, language: Language): Promise<void> {
+export async function speakWithOpenAI(
+  text: string,
+  language: Language,
+  onPlaying?: (playing: boolean) => void,
+): Promise<void> {
+  const res = await fetch("/api/speak", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, language }),
+  });
+
+  if (!res.ok) throw new Error(`TTS error: ${res.status}`);
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+
+  return new Promise<void>((resolve) => {
+    const audio = new Audio(url);
+    onPlaying?.(true);
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      onPlaying?.(false);
+      resolve();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      onPlaying?.(false);
+      resolve();
+    };
+    audio.play().catch(() => {
+      onPlaying?.(false);
+      resolve();
+    });
+  });
+}
+
+export function speak(
+  text: string,
+  language: Language,
+  onPlaying?: (playing: boolean) => void,
+): Promise<void> {
+  window.speechSynthesis.cancel();
   return new Promise((resolve, reject) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = LANG_BCP47[language];
@@ -66,8 +143,15 @@ export function speak(text: string, language: Language): Promise<void> {
     const matchingVoice = voices.find((v) => v.lang.startsWith(LANG_BCP47[language].slice(0, 2)));
     if (matchingVoice) utterance.voice = matchingVoice;
 
-    utterance.onend = () => resolve();
-    utterance.onerror = () => reject(new Error("Speech synthesis failed"));
+    onPlaying?.(true);
+    utterance.onend = () => {
+      onPlaying?.(false);
+      resolve();
+    };
+    utterance.onerror = () => {
+      onPlaying?.(false);
+      reject(new Error("Speech synthesis failed"));
+    };
 
     window.speechSynthesis.speak(utterance);
   });

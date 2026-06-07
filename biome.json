@@ -83,6 +83,9 @@
         "rules": {
           "suspicious": {
             "noConsole": "off"
+          },
+          "complexity": {
+            "useLiteralKeys": "off"
           }
         }
       }

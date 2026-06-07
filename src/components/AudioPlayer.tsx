@@ -1,25 +1,37 @@
 "use client";
 
-import { isTTSSupported, speak } from "@/lib/speech";
+import { isTTSSupported, speak, speakWithOpenAI } from "@/lib/speech";
 import type { Language, Message } from "@/types";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 type Props = {
   messages: Message[];
   language: Language;
+  isStreaming: boolean;
+  onSpeakingChange?: (speaking: boolean) => void;
 };
 
-export function AudioPlayer({ messages, language }: Props) {
-  const lastMessage = messages[messages.length - 1];
+export function AudioPlayer({ messages, language, isStreaming, onSpeakingChange }: Props) {
+  const lastSpokenIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!lastMessage || lastMessage.role !== "assistant") return;
-    if (!isTTSSupported()) return;
+    if (isStreaming) return;
 
-    speak(lastMessage.content, language).catch(() => {
-      // TTS failure is non-fatal — user can still read the text
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== "assistant") return;
+    if (!lastMessage.content) return;
+    if (lastSpokenIdRef.current === lastMessage.id) return;
+
+    lastSpokenIdRef.current = lastMessage.id;
+
+    speakWithOpenAI(lastMessage.content, language, onSpeakingChange).catch(() => {
+      if (isTTSSupported()) {
+        speak(lastMessage.content, language, onSpeakingChange).catch(() => {});
+      } else {
+        onSpeakingChange?.(false);
+      }
     });
-  }, [lastMessage, language]);
+  }, [isStreaming, messages, language, onSpeakingChange]);
 
   return null;
 }

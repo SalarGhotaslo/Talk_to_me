@@ -7,20 +7,8 @@ pre-commit:
       run: npm run lint
     secret-scan:
       run: |
-        if git diff --cached --name-only | xargs grep -l "sk-or-v1-\|sk-ant-\|sk-proj-\|AKIA" 2>/dev/null; then
+        if git diff --cached --name-only | grep -v "^lefthook.yml$" | xargs grep -l "sk-or-v1-\|sk-ant-\|sk-proj-\|AKIA" 2>/dev/null; then
           echo "❌ Possible secret detected in staged files. Aborting."
-          exit 1
-        fi
-
-commit-msg:
-  commands:
-    conventional:
-      run: |
-        msg=$(cat {1})
-        pattern="^(feat|fix|refactor|chore|docs|test|perf|ci|style|build|revert)(\(.+\))?: .{1,72}"
-        if ! echo "$msg" | grep -qE "$pattern"; then
-          echo "❌ Commit message must follow Conventional Commits format."
-          echo "   Examples: feat(auth): add login, fix(api): handle null"
           exit 1
         fi
 

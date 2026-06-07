@@ -25,11 +25,14 @@ export function VoiceRecorder({ state, onToggle, disabled = false }: Props) {
       aria-label={ARIA_LABELS[state]}
       aria-pressed={state === "recording"}
       className={[
-        "relative flex h-20 w-20 items-center justify-center rounded-full transition-all",
-        "focus:outline-none focus-visible:ring-4 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
-        state === "idle" && "bg-indigo-600 hover:bg-indigo-700 shadow-lg",
-        state === "recording" && "bg-red-500 hover:bg-red-600 shadow-lg",
-        state === "processing" && "bg-gray-400 cursor-not-allowed",
+        "relative flex h-14 w-14 items-center justify-center rounded-full transition-all duration-200",
+        "focus:outline-none focus-visible:ring-4 focus-visible:ring-[#007AFF]/30 focus-visible:ring-offset-2",
+        "shadow-md hover:shadow-lg active:scale-95",
+        state === "idle" &&
+          "bg-[#007AFF] hover:bg-[#0066d6] dark:bg-[#0A84FF] dark:hover:bg-[#0066d6]",
+        state === "recording" &&
+          "bg-red-500 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600",
+        state === "processing" && "bg-gray-400 cursor-not-allowed dark:bg-gray-600",
         isDisabled && state !== "processing" && "opacity-50 cursor-not-allowed",
       ]
         .filter(Boolean)
@@ -38,7 +41,7 @@ export function VoiceRecorder({ state, onToggle, disabled = false }: Props) {
       {state === "idle" && (
         <svg
           aria-hidden="true"
-          className="h-8 w-8 text-white"
+          className="h-6 w-6 text-white"
           fill="currentColor"
           viewBox="0 0 24 24"
         >
@@ -47,10 +50,10 @@ export function VoiceRecorder({ state, onToggle, disabled = false }: Props) {
       )}
       {state === "recording" && (
         <>
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400/60 dark:bg-red-400/60" />
           <svg
             aria-hidden="true"
-            className="relative h-8 w-8 text-white"
+            className="relative h-6 w-6 text-white"
             fill="currentColor"
             viewBox="0 0 24 24"
           >
@@ -61,7 +64,7 @@ export function VoiceRecorder({ state, onToggle, disabled = false }: Props) {
       {state === "processing" && (
         <svg
           aria-hidden="true"
-          className="h-8 w-8 animate-spin text-white"
+          className="h-6 w-6 animate-spin text-white"
           fill="none"
           viewBox="0 0 24 24"
         >

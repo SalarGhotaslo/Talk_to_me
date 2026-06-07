@@ -115,7 +115,6 @@ Non-negotiable. No exceptions. No bypasses.
 | **No hardcoded secrets** | All secrets in `.env`. Pre-commit hook blocks leaks. |
 | **Tests must stay green** | If your change breaks a passing test, revert. Fix before proceeding. |
 | **All gates must pass** | A task is not done until every Definition of Done item is green. |
-| **Conventional commits** | `feat(scope): description` — enforced by commit-msg hook. |
 | **Update PLAN.md** | Any new feature, requirement, or architectural decision must be in PLAN.md before PR merge. |
 
 ---

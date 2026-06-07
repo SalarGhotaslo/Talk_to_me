@@ -1,4 +1,5 @@
-import { callOpenRouter, parseSSEStream } from "@/lib/openrouter";
+import { callOpenAI } from "@/lib/openai";
+import { parseSSEStream } from "@/lib/openrouter";
 import type { OpenRouterError } from "@/types";
 import { z } from "zod";
 
@@ -9,7 +10,10 @@ const MessageSchema = z.object({
 
 const RequestSchema = z.object({
   messages: z.array(MessageSchema).min(1),
-  language: z.enum(["en", "sv", "fa", "es"]),
+  language: z.enum(["en", "sv", "fa", "es", "tr", "fr", "nl"]),
+  topic: z
+    .enum(["free", "restaurant", "travel", "shopping", "business", "introductions", "hobbies"])
+    .optional(),
 });
 
 export async function POST(req: Request): Promise<Response> {
@@ -25,11 +29,15 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { messages, language } = parsed.data;
+  const { messages, language, topic } = parsed.data;
+
+  if (!process.env.OPENAI_API_KEY) {
+    return Response.json({ error: "OpenAI API key not configured" }, { status: 503 });
+  }
 
   let upstreamResponse: Response;
   try {
-    upstreamResponse = await callOpenRouter(messages, language);
+    upstreamResponse = await callOpenAI(messages, language, topic);
   } catch (err) {
     const error = err as OpenRouterError;
     if (error.code === "unauthorized") {

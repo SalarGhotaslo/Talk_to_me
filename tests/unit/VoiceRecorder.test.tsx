@@ -36,6 +36,11 @@ describe("VoiceRecorder", () => {
     expect(screen.getByRole("button")).toBeDisabled();
   });
 
+  it("is disabled when disabled prop is true", () => {
+    render(<VoiceRecorder state="idle" onToggle={vi.fn()} disabled />);
+    expect(screen.getByRole("button")).toBeDisabled();
+  });
+
   it("calls onToggle when clicked from idle state", async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();

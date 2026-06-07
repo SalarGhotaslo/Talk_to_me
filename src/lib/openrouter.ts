@@ -4,7 +4,6 @@ import type { Language, OpenRouterError } from "@/types";
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "meta-llama/llama-3.3-70b-instruct:free";
 
 type SSEDelta = {
   choices: Array<{ delta: { content?: string } }>;
@@ -26,9 +25,10 @@ export async function callOpenRouter(
   language: Language,
 ): Promise<Response> {
   const apiKey = process.env.OPENROUTER_API_KEY;
+  const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
 
   const body = JSON.stringify({
-    model: MODEL,
+    model,
     stream: true,
     messages: [
       { role: "system", content: buildSystemPrompt(language) },
