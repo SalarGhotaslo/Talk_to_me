@@ -25,6 +25,38 @@ export function isTTSSupported(): boolean {
   return typeof window !== "undefined" && Boolean(window.speechSynthesis);
 }
 
+type WindowWithAudio = Window & {
+  webkitAudioContext?: typeof AudioContext;
+};
+
+let unlocked = false;
+
+export function resetAudioState(): void {
+  unlocked = false;
+}
+
+export function unlockAudio(): void {
+  if (unlocked) return;
+  unlocked = true;
+
+  try {
+    const AudioCtor = window.AudioContext ?? (window as WindowWithAudio).webkitAudioContext;
+    if (!AudioCtor) return;
+    const ctx = new AudioCtor();
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => {
+        const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start();
+      });
+    }
+  } catch {
+    /* audio not available */
+  }
+}
+
 const SENTENCE_END = /([.!?])(\s)/g;
 
 export function prepareForTTS(text: string): string {

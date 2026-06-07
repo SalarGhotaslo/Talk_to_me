@@ -3,7 +3,7 @@
 import { ConversationView } from "@/components/ConversationView";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { VoiceRecorder } from "@/components/VoiceRecorder";
-import { speakWithOpenAI } from "@/lib/speech";
+import { speakWithOpenAI, unlockAudio } from "@/lib/speech";
 import type { Language, Message, Topic } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -153,6 +153,7 @@ export default function Home() {
   );
 
   const handleRecordingToggle = useCallback(() => {
+    unlockAudio();
     if (state.recordingState === "recording") {
       recognitionRef.current?.stop();
       setState((prev) => ({ ...prev, recordingState: "idle" }));
@@ -236,6 +237,7 @@ export default function Home() {
   }, [state.language, state.recordingState, sendMessage]);
 
   const handleTypedSend = useCallback(() => {
+    unlockAudio();
     const text = typedText.trim();
     if (!text) return;
     setTypedText("");

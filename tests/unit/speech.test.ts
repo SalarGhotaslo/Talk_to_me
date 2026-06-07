@@ -2,9 +2,11 @@ import {
   isSTTSupported,
   isTTSSupported,
   prepareForTTS,
+  resetAudioState,
   speak,
   speakWithOpenAI,
   startListening,
+  unlockAudio,
 } from "@/lib/speech";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +14,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
+  resetAudioState();
 });
 
 describe("isSTTSupported", () => {
@@ -47,6 +50,107 @@ describe("isTTSSupported", () => {
   it("returns false when speechSynthesis is not available", () => {
     vi.stubGlobal("speechSynthesis", undefined);
     expect(isTTSSupported()).toBe(false);
+  });
+});
+
+describe("unlockAudio", () => {
+  beforeEach(() => {
+    resetAudioState();
+  });
+
+  it("does nothing when AudioContext is unavailable", () => {
+    window.AudioContext = undefined as unknown as typeof AudioContext;
+    (window as unknown as Record<string, unknown>).webkitAudioContext = undefined;
+    expect(() => unlockAudio()).not.toThrow();
+  });
+
+  it("does not throw when AudioContext constructor throws", () => {
+    window.AudioContext = class Throwing {
+      constructor() {
+        throw new Error("no audio");
+      }
+    } as unknown as typeof AudioContext;
+    expect(() => unlockAudio()).not.toThrow();
+  });
+
+  it("creates AudioContext and resumes it when suspended", () => {
+    let resume: (() => Promise<void>) | undefined;
+    window.AudioContext = class MockAudio {
+      constructor() {
+        (this as unknown as Record<string, unknown>).state = "suspended";
+        (this as unknown as Record<string, unknown>).resume = vi
+          .fn<() => Promise<void>>()
+          .mockResolvedValue(undefined);
+        (this as unknown as Record<string, unknown>).sampleRate = 44100;
+        (this as unknown as Record<string, unknown>).createBuffer = vi.fn().mockReturnValue({});
+        (this as unknown as Record<string, unknown>).createBufferSource = vi.fn().mockReturnValue({
+          buffer: null,
+          connect: vi.fn(),
+          start: vi.fn(),
+        });
+        (this as unknown as Record<string, unknown>).destination = {};
+        resume = (this as unknown as Record<string, unknown>).resume as () => Promise<void>;
+      }
+    } as unknown as typeof AudioContext;
+
+    unlockAudio();
+
+    expect(resume).toHaveBeenCalledOnce();
+  });
+
+  it("does not resume when AudioContext is already running", () => {
+    let resume: (() => void) | undefined;
+    window.AudioContext = class MockAudio {
+      constructor() {
+        (this as unknown as Record<string, unknown>).state = "running";
+        (this as unknown as Record<string, unknown>).resume = vi.fn();
+        resume = (this as unknown as Record<string, unknown>).resume as () => void;
+      }
+    } as unknown as typeof AudioContext;
+
+    unlockAudio();
+
+    expect(resume).not.toHaveBeenCalled();
+  });
+
+  it("is idempotent — second call is a no-op", () => {
+    const calls: number[] = [];
+    window.AudioContext = class MockAudio {
+      constructor() {
+        calls.push(1);
+        (this as unknown as Record<string, unknown>).state = "suspended";
+        (this as unknown as Record<string, unknown>).resume = vi.fn().mockResolvedValue(undefined);
+        (this as unknown as Record<string, unknown>).sampleRate = 44100;
+        (this as unknown as Record<string, unknown>).createBuffer = vi.fn().mockReturnValue({});
+        (this as unknown as Record<string, unknown>).createBufferSource = vi.fn().mockReturnValue({
+          buffer: null,
+          connect: vi.fn(),
+          start: vi.fn(),
+        });
+        (this as unknown as Record<string, unknown>).destination = {};
+      }
+    } as unknown as typeof AudioContext;
+
+    unlockAudio();
+    unlockAudio();
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it("uses webkitAudioContext fallback when AudioContext is missing", () => {
+    window.AudioContext = undefined as unknown as typeof AudioContext;
+    const calls: number[] = [];
+    (window as unknown as Record<string, unknown>).webkitAudioContext = class MockWebkitAudio {
+      constructor() {
+        calls.push(1);
+        (this as unknown as Record<string, unknown>).state = "running";
+        (this as unknown as Record<string, unknown>).resume = vi.fn();
+      }
+    } as unknown as typeof AudioContext;
+
+    unlockAudio();
+
+    expect(calls).toHaveLength(1);
   });
 });
 
