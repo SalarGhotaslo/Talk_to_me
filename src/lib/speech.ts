@@ -25,10 +25,10 @@ export function isTTSSupported(): boolean {
   return typeof window !== "undefined" && Boolean(window.speechSynthesis);
 }
 
-const SENTENCE_END = /([.!?])(\s|$)/g;
+const SENTENCE_END = /([.!?])(\s)/g;
 
 export function prepareForTTS(text: string): string {
-  return text.trim().replace(SENTENCE_END, "$1   $2");
+  return text.trim().replace(SENTENCE_END, "$1   ");
 }
 
 export function startListening(
