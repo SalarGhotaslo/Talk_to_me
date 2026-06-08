@@ -30,30 +30,43 @@ type WindowWithAudio = Window & {
 };
 
 let unlocked = false;
+let audioContext: AudioContext | null = null;
+
+function getAudioContext(): AudioContext | null {
+  if (audioContext && audioContext.state !== "closed") return audioContext;
+  const AudioCtor = window.AudioContext ?? (window as WindowWithAudio).webkitAudioContext;
+  if (!AudioCtor) return null;
+  try {
+    audioContext = new AudioCtor();
+    return audioContext;
+  } catch {
+    return null;
+  }
+}
 
 export function resetAudioState(): void {
   unlocked = false;
+  if (audioContext) {
+    audioContext.close?.()?.catch(() => {});
+    audioContext = null;
+  }
 }
 
 export function unlockAudio(): void {
   if (unlocked) return;
   unlocked = true;
 
-  try {
-    const AudioCtor = window.AudioContext ?? (window as WindowWithAudio).webkitAudioContext;
-    if (!AudioCtor) return;
-    const ctx = new AudioCtor();
-    if (ctx.state === "suspended") {
-      ctx.resume().then(() => {
-        const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
-        const source = ctx.createBufferSource();
-        source.buffer = buffer;
-        source.connect(ctx.destination);
-        source.start();
-      });
-    }
-  } catch {
-    /* audio not available */
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  if (ctx.state === "suspended") {
+    ctx.resume().then(() => {
+      const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start();
+    });
   }
 }
 
@@ -125,6 +138,65 @@ export function startListening(
   };
 }
 
+function playWithAudioContext(
+  ctx: AudioContext,
+  arrayBuffer: ArrayBuffer,
+  onPlaying?: (playing: boolean) => void,
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const ensureRunning = ctx.state === "suspended" ? ctx.resume() : Promise.resolve();
+    ensureRunning.then(() => {
+      ctx.decodeAudioData(
+        arrayBuffer,
+        (buffer) => {
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          onPlaying?.(true);
+          source.onended = () => {
+            onPlaying?.(false);
+            resolve();
+          };
+          source.start();
+        },
+        () => {
+          onPlaying?.(false);
+          resolve();
+        },
+      );
+    });
+  });
+}
+
+function playWithAudioElement(url: string, onPlaying?: (playing: boolean) => void): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const audio = new Audio(url);
+    onPlaying?.(true);
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      onPlaying?.(false);
+      resolve();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      onPlaying?.(false);
+      resolve();
+    };
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      playPromise.catch(() => {
+        URL.revokeObjectURL(url);
+        onPlaying?.(false);
+        resolve();
+      });
+    } else {
+      URL.revokeObjectURL(url);
+      onPlaying?.(false);
+      resolve();
+    }
+  });
+}
+
 export async function speakWithOpenAI(
   text: string,
   language: Language,
@@ -139,26 +211,21 @@ export async function speakWithOpenAI(
   if (!res.ok) throw new Error(`TTS error: ${res.status}`);
 
   const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
 
-  return new Promise<void>((resolve) => {
-    const audio = new Audio(url);
-    onPlaying?.(true);
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      onPlaying?.(false);
-      resolve();
-    };
-    audio.onerror = () => {
-      URL.revokeObjectURL(url);
-      onPlaying?.(false);
-      resolve();
-    };
-    audio.play().catch(() => {
-      onPlaying?.(false);
-      resolve();
-    });
-  });
+  const ctx = getAudioContext();
+  if (ctx) {
+    const arrayBuffer = await blob.arrayBuffer();
+    try {
+      await playWithAudioContext(ctx, arrayBuffer, onPlaying);
+      return;
+    } catch {
+      // AudioContext playback failed, fall through to HTMLAudioElement
+    }
+  }
+
+  // Fallback: HTMLAudioElement for browsers without AudioContext
+  const url = URL.createObjectURL(blob);
+  await playWithAudioElement(url, onPlaying);
 }
 
 export function speak(

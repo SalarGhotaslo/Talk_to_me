@@ -493,33 +493,41 @@ describe("speak", () => {
 });
 
 describe("speakWithOpenAI", () => {
-  type MockAudio = {
-    play: ReturnType<typeof vi.fn>;
+  type MockBufferSource = {
+    buffer: AudioBuffer | null;
+    connect: ReturnType<typeof vi.fn>;
+    start: ReturnType<typeof vi.fn>;
     onended: (() => void) | null;
-    onerror: (() => void) | null;
   };
 
-  let mockAudio: MockAudio;
+  let mockSource: MockBufferSource;
 
   beforeEach(() => {
-    // play fires onended via queueMicrotask — onended is always set before play() is called
-    // in the implementation, so this simulates audio completing immediately
-    mockAudio = {
-      play: vi.fn().mockImplementation(() => {
-        queueMicrotask(() => mockAudio.onended?.());
-        return Promise.resolve();
+    mockSource = {
+      buffer: null,
+      connect: vi.fn(),
+      start: vi.fn(() => {
+        queueMicrotask(() => mockSource.onended?.());
       }),
       onended: null,
-      onerror: null,
     };
 
     vi.stubGlobal(
-      "Audio",
-      vi.fn(function (this: MockAudio) {
-        Object.assign(this, mockAudio);
-        mockAudio = this;
+      "AudioContext",
+      // biome-ignore lint/complexity/useArrowFunction: vi.fn is called with `new` by getAudioContext; arrow functions aren't constructors
+      vi.fn(function () {
+        return {
+          state: "running",
+          resume: vi.fn().mockResolvedValue(undefined),
+          decodeAudioData: vi.fn((_buffer: ArrayBuffer, success: (buffer: AudioBuffer) => void) => {
+            success({} as AudioBuffer);
+          }),
+          createBufferSource: vi.fn(() => mockSource),
+          destination: {},
+        };
       }),
     );
+    vi.stubGlobal("webkitAudioContext", undefined);
 
     vi.stubGlobal("URL", {
       createObjectURL: vi.fn().mockReturnValue("blob:mock-url"),
@@ -530,7 +538,11 @@ describe("speakWithOpenAI", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        blob: vi.fn().mockResolvedValue(new Blob(["audio"], { type: "audio/mpeg" })),
+        blob: vi.fn().mockResolvedValue({
+          arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(10)),
+          type: "audio/mpeg",
+        }),
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(10)),
       }),
     );
   });
@@ -545,16 +557,11 @@ describe("speakWithOpenAI", () => {
     });
   });
 
-  it("creates an Audio element and calls play", async () => {
+  it("decodes audio and plays via AudioContext", async () => {
     await speakWithOpenAI("Hej", "sv");
 
-    expect(mockAudio.play).toHaveBeenCalledOnce();
-  });
-
-  it("revokes the object URL after playback ends", async () => {
-    await speakWithOpenAI("Hello", "en");
-
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+    expect(mockSource.connect).toHaveBeenCalledOnce();
+    expect(mockSource.start).toHaveBeenCalledOnce();
   });
 
   it("throws when the API returns an error", async () => {
@@ -569,20 +576,78 @@ describe("speakWithOpenAI", () => {
     expect(onPlaying).toHaveBeenNthCalledWith(2, false);
   });
 
-  it("calls onPlaying with false when audio play fails", async () => {
-    mockAudio.play = vi.fn().mockRejectedValue(new Error("Play failed"));
+  it("calls onPlaying with false when decodeAudioData fails", async () => {
+    vi.stubGlobal(
+      "AudioContext",
+      // biome-ignore lint/complexity/useArrowFunction: vi.fn is called with `new` by getAudioContext; arrow functions aren't constructors
+      vi.fn(function () {
+        return {
+          state: "running",
+          resume: vi.fn().mockResolvedValue(undefined),
+          decodeAudioData: vi.fn(
+            (_buffer: ArrayBuffer, _success: (buffer: AudioBuffer) => void, error: () => void) => {
+              error();
+            },
+          ),
+          createBufferSource: vi.fn(() => mockSource),
+          destination: {},
+        };
+      }),
+    );
+
     const onPlaying = vi.fn();
     await speakWithOpenAI("Hello", "en", onPlaying);
     expect(onPlaying).toHaveBeenCalledWith(false);
   });
 
-  it("calls onPlaying with false when audio errors", async () => {
-    mockAudio.play = vi.fn().mockImplementation(() => {
-      queueMicrotask(() => mockAudio.onerror?.());
+  // HTMLAudioElement fallback tests are skipped in jsdom because jsdom doesn't
+  // fire HTMLMediaElement events. On real iOS, AudioContext is always available
+  // so the fallback is never reached in this environment.
+
+  it("falls back to HTMLAudioElement when AudioContext is unavailable", async () => {
+    vi.stubGlobal("AudioContext", undefined);
+    vi.stubGlobal("webkitAudioContext", undefined);
+
+    const playMock = vi.fn(function (this: { onended: (() => void) | null }) {
+      queueMicrotask(() => this.onended?.());
       return Promise.resolve();
     });
+
+    vi.stubGlobal(
+      "Audio",
+      vi.fn(function (this: Record<string, unknown>) {
+        Object.assign(this, { play: playMock, onended: null, onerror: null });
+        return this;
+      }),
+    );
+
     const onPlaying = vi.fn();
     await speakWithOpenAI("Hello", "en", onPlaying);
-    expect(onPlaying).toHaveBeenLastCalledWith(false);
+
+    expect(playMock).toHaveBeenCalledOnce();
+    expect(onPlaying).toHaveBeenNthCalledWith(1, true);
+    expect(onPlaying).toHaveBeenNthCalledWith(2, false);
+  });
+
+  it("revokes blob URL in HTMLAudioElement fallback", async () => {
+    vi.stubGlobal("AudioContext", undefined);
+    vi.stubGlobal("webkitAudioContext", undefined);
+
+    const playMock = vi.fn(function (this: { onended: (() => void) | null }) {
+      queueMicrotask(() => this.onended?.());
+      return Promise.resolve();
+    });
+
+    vi.stubGlobal(
+      "Audio",
+      vi.fn(function (this: Record<string, unknown>) {
+        Object.assign(this, { play: playMock, onended: null, onerror: null });
+        return this;
+      }),
+    );
+
+    await speakWithOpenAI("Hello", "en");
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
   });
 });
