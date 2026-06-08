@@ -388,4 +388,91 @@ describe("RealtimeSession", () => {
     expect(mockAudioCtx.createBuffer).toHaveBeenCalled();
     expect(mockAudioCtx.createBufferSource).toHaveBeenCalled();
   });
+
+  it("processPlayQueue handles corrupt audio data gracefully", () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    session["audioContext"] = mockAudioCtx as unknown as AudioContext;
+    session["playQueue"] = ["invalid-base64!!"];
+    expect(() => session["processPlayQueue"]()).not.toThrow();
+  });
+
+  it("does not call connectWebSocket when session becomes inactive after token fetch", async () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    session["fetchToken"] = vi.fn().mockResolvedValue("token");
+    const connectSpy = vi.fn();
+    session["connectWebSocket"] = connectSpy;
+
+    const startPromise = session.start();
+    session.stop();
+    await startPromise;
+
+    expect(connectSpy).not.toHaveBeenCalled();
+    expect(callbacks.onStatusChange).toHaveBeenCalledWith("connecting");
+  });
+
+  it("cleanup handles already-null resources gracefully", () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    session["scriptProcessor"] = null;
+    session["audioSource"] = null;
+    expect(() => session["cleanup"]()).not.toThrow();
+    expect(session["scriptProcessor"]).toBeNull();
+    expect(session["audioSource"]).toBeNull();
+  });
+
+  it("fetchToken handles error response without error field", async () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockResolvedValue({}),
+      }),
+    );
+    await session.start();
+    expect(callbacks.onError).toHaveBeenCalledWith("Token request failed (500)");
+  });
+
+  it("startRecording stops early if session becomes inactive after getUserMedia", async () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: vi.fn().mockResolvedValue({
+          getTracks: vi.fn().mockReturnValue([{ stop: vi.fn() }]),
+        }),
+      },
+    });
+    session["active"] = false;
+    await session["startRecording"]();
+    expect(callbacks.onStatusChange).not.toHaveBeenCalledWith("listening");
+  });
+
+  it("processPlayQueue when base64 is null after shift", () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    session["audioContext"] = mockAudioCtx as unknown as AudioContext;
+    session["playQueue"] = [undefined as unknown as string];
+    expect(() => session["processPlayQueue"]()).not.toThrow();
+    expect(session["isPlaying"]).toBe(false);
+  });
+
+  it("stopMediaStream handles null mediaStream", () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    session["mediaStream"] = null;
+    expect(() => session["stopMediaStream"]()).not.toThrow();
+  });
+
+  it("handles non-Error throw from fetchToken", async () => {
+    const callbacks = makeCallbacks();
+    const session = new RealtimeSession(callbacks, { voice: "echo", language: "en" });
+    session["fetchToken"] = vi.fn().mockRejectedValue("string error");
+    await session.start();
+    expect(callbacks.onError).toHaveBeenCalledWith("Failed to start session");
+  });
 });

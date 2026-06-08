@@ -222,6 +222,47 @@ describe("POST /api/chat", () => {
     const res = await POST(req);
     expect(res.status).toBe(503);
   });
+
+  it("returns 502 when OpenAI returns other error (e.g. 500)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+      }),
+    );
+
+    const { POST } = await import("@/app/api/chat/route");
+    const req = new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "Hi" }],
+        language: "en",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(502);
+  });
+
+  it("returns 502 when OpenAI response has no body", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, body: null }));
+
+    const { POST } = await import("@/app/api/chat/route");
+    const req = new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "Hi" }],
+        language: "en",
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(502);
+  });
 });
 
 describe("GET /api/health", () => {

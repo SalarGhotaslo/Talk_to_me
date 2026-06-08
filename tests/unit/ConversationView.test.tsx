@@ -107,4 +107,23 @@ describe("ConversationView", () => {
     const liveRegion = container.querySelector("[aria-relevant='additions']");
     expect(liveRegion).toBeInTheDocument();
   });
+
+  it("does not apply animation class to messages beyond the last 3", () => {
+    const messages = [
+      makeMsg("1", "user", "Hello"),
+      makeMsg("2", "assistant", "Hi!"),
+      makeMsg("3", "user", "How are you?"),
+      makeMsg("4", "assistant", "I'm great!"),
+      makeMsg("5", "user", "Nice"),
+    ];
+    const { container } = render(<ConversationView messages={messages} isSpeaking={false} />);
+    const items = container.querySelectorAll("li");
+    // First 2 items (index 0, 1) should NOT have animation class
+    expect(items[0]?.className).not.toContain("animate-slide-up");
+    expect(items[1]?.className).not.toContain("animate-slide-up");
+    // Last 3 items (index 2, 3, 4) should have animation class
+    expect(items[2]?.className).toContain("animate-slide-up");
+    expect(items[3]?.className).toContain("animate-slide-up");
+    expect(items[4]?.className).toContain("animate-slide-up");
+  });
 });

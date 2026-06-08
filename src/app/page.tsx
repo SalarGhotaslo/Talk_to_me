@@ -177,7 +177,7 @@ export default function Home() {
     const BCP47: Record<Language, string> = {
       en: "en-US",
       sv: "sv-SE",
-      fa: "fa-IR",
+      fa: "fa",
       es: "es-ES",
       tr: "tr-TR",
       fr: "fr-FR",
@@ -268,7 +268,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="mx-auto flex h-dvh max-w-[720px] flex-col bg-gray-50 dark:bg-black">
+    <div className="mx-auto flex h-dvh max-w-[720px] flex-col overflow-hidden bg-gray-50 dark:bg-black">
       {/* Header */}
       <header className="flex items-center justify-between border-b border-gray-200/80 bg-white/80 px-4 py-2.5 backdrop-blur dark:border-gray-800 dark:bg-gray-900/80">
         <div className="flex items-center gap-2">

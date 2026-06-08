@@ -11,9 +11,24 @@ const mockSession = {
   stop: mockStop,
 };
 
+let capturedCallbacks: {
+  onUserTranscript: (...args: unknown[]) => void;
+  onAssistantDelta: (...args: unknown[]) => void;
+  onStatusChange: (...args: unknown[]) => void;
+  onError: (...args: unknown[]) => void;
+} | null = null;
+
 vi.mock("@/lib/realtime", () => ({
-  // biome-ignore lint/complexity/useArrowFunction: need proper constructor for `new`
-  RealtimeSession: vi.fn(function () {
+  RealtimeSession: vi.fn(function (
+    this: unknown,
+    callbacks: {
+      onUserTranscript: (...args: unknown[]) => void;
+      onAssistantDelta: (...args: unknown[]) => void;
+      onStatusChange: (...args: unknown[]) => void;
+      onError: (...args: unknown[]) => void;
+    },
+  ) {
+    capturedCallbacks = callbacks;
     return mockSession;
   }),
   isRealtimeSupported: vi.fn(),
@@ -146,5 +161,50 @@ describe("useRealtimeConversation", () => {
     });
 
     expect(result.current.status).toBe("idle");
+  });
+
+  it("updates status via handleStatusChange callback", async () => {
+    const { result } = renderHook(() =>
+      useRealtimeConversation({
+        language: "en",
+        voice: "echo",
+        onUserMessage: vi.fn(),
+        onAssistantDelta: vi.fn(),
+        onError: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    act(() => {
+      capturedCallbacks?.onStatusChange("listening");
+    });
+
+    expect(result.current.status).toBe("listening");
+  });
+
+  it("calls onError via handleError callback", async () => {
+    const onError = vi.fn();
+    const { result } = renderHook(() =>
+      useRealtimeConversation({
+        language: "en",
+        voice: "echo",
+        onUserMessage: vi.fn(),
+        onAssistantDelta: vi.fn(),
+        onError,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.start();
+    });
+
+    act(() => {
+      capturedCallbacks?.onError("test error");
+    });
+
+    expect(onError).toHaveBeenCalledWith("test error");
   });
 });

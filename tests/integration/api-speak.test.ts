@@ -106,7 +106,7 @@ describe("POST /api/speak", () => {
     expect(url).toBe("https://api.openai.com/v1/audio/speech");
     const body = JSON.parse(init.body as string) as Record<string, string>;
     expect(body.model).toBe("tts-1-hd");
-    expect(body.voice).toBe("echo");
+    expect(body.voice).toBe("alloy");
     expect(body.input).toBe("Hej världen");
     expect(body.response_format).toBe("mp3");
     expect(body.speed).toBe(0.9);
@@ -135,7 +135,7 @@ describe("POST /api/speak", () => {
     expect(url).toBe("https://api.openai.com/v1/audio/speech");
     const body = JSON.parse(init.body as string) as Record<string, string>;
     expect(body.model).toBe("tts-1-hd");
-    expect(body.voice).toBe("echo");
+    expect(body.voice).toBe("alloy");
     expect(body.input).toBe("Merhaba");
     expect(body.response_format).toBe("mp3");
     expect(body.speed).toBe(0.9);

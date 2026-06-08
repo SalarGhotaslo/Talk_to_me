@@ -201,7 +201,7 @@ describe("startListening", () => {
 
   it("sets the correct BCP-47 lang for Farsi", () => {
     startListening("fa", vi.fn(), vi.fn());
-    expect(mockRecognition.lang).toBe("fa-IR");
+    expect(mockRecognition.lang).toBe("fa");
   });
 
   it("sets the correct BCP-47 lang for Spanish", () => {
@@ -348,15 +348,15 @@ describe("startListening", () => {
 
 describe("prepareForTTS", () => {
   it("adds extra space after periods", () => {
-    expect(prepareForTTS("Hello world. How are you?")).toBe("Hello world.   How are you?");
+    expect(prepareForTTS("Hello world. How are you?", "en")).toBe("Hello world.   How are you?");
   });
 
   it("adds extra space after question marks", () => {
-    expect(prepareForTTS("¿Cómo estás? Muy bien.")).toBe("¿Cómo estás?   Muy bien.");
+    expect(prepareForTTS("¿Cómo estás? Muy bien.")).toBe("¿Cómo estás?          Muy bien.");
   });
 
   it("adds extra space after exclamation marks", () => {
-    expect(prepareForTTS("¡Hola! ¿Qué tal?")).toBe("¡Hola!   ¿Qué tal?");
+    expect(prepareForTTS("¡Hola! ¿Qué tal?")).toBe("¡Hola!          ¿Qué tal?");
   });
 
   it("handles single sentence without change", () => {
@@ -372,13 +372,25 @@ describe("prepareForTTS", () => {
   });
 
   it("trims surrounding whitespace", () => {
-    expect(prepareForTTS("  Hello. World.  ")).toBe("Hello.   World.");
+    expect(prepareForTTS("  Hello. World.  ", "en")).toBe("Hello.   World.");
   });
 
   it("handles multiple sentences in Spanish", () => {
     const input = "Hola, ¿cómo estás? Muy bien, gracias. ¿Y tú?";
     const result = prepareForTTS(input);
-    expect(result).toBe("Hola, ¿cómo estás?   Muy bien, gracias.   ¿Y tú?");
+    expect(result).toBe("Hola,      ¿cómo estás?          Muy bien,      gracias.          ¿Y tú?");
+  });
+
+  it("adds long pause after ellipsis for non-English", () => {
+    expect(prepareForTTS("Espera… no estoy seguro.")).toBe("Espera…          no estoy seguro.");
+  });
+
+  it("adds pause after em-dash for non-English", () => {
+    expect(prepareForTTS("Él dijo— y luego se fue.")).toBe("Él dijo—      y luego se fue.");
+  });
+
+  it("does not treat em-dash as punctuation for English", () => {
+    expect(prepareForTTS("He said— and then left.", "en")).toBe("He said— and then left.");
   });
 });
 
@@ -434,7 +446,7 @@ describe("speak", () => {
 
   it("sets Farsi locale on utterance", async () => {
     await speak("سلام", "fa");
-    expect(lastUtterance.lang).toBe("fa-IR");
+    expect(lastUtterance.lang).toBe("fa");
   });
 
   it("sets Turkish locale on utterance", async () => {
@@ -649,5 +661,119 @@ describe("speakWithOpenAI", () => {
     await speakWithOpenAI("Hello", "en");
 
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+  });
+
+  it("handles HTMLAudioElement onerror in fallback", async () => {
+    vi.stubGlobal("AudioContext", undefined);
+    vi.stubGlobal("webkitAudioContext", undefined);
+
+    vi.stubGlobal(
+      "Audio",
+      vi.fn(function (this: Record<string, unknown>) {
+        Object.assign(this, {
+          play: vi.fn().mockReturnValue(Promise.resolve()),
+          onended: null,
+          onerror: null,
+        });
+        queueMicrotask(() => {
+          (this as unknown as { onerror: (() => void) | null }).onerror?.();
+        });
+        return this;
+      }),
+    );
+
+    const onPlaying = vi.fn();
+    await speakWithOpenAI("Hello", "en", onPlaying);
+    expect(onPlaying).toHaveBeenCalledWith(false);
+  });
+
+  it("handles play() promise rejection in HTMLAudioElement fallback", async () => {
+    vi.stubGlobal("AudioContext", undefined);
+    vi.stubGlobal("webkitAudioContext", undefined);
+
+    vi.stubGlobal(
+      "Audio",
+      vi.fn(function (this: Record<string, unknown>) {
+        Object.assign(this, {
+          play: vi.fn().mockReturnValue(Promise.reject(new Error("play failed"))),
+          onended: null,
+          onerror: null,
+        });
+        return this;
+      }),
+    );
+
+    const onPlaying = vi.fn();
+    await speakWithOpenAI("Hello", "en", onPlaying);
+    expect(onPlaying).toHaveBeenCalledWith(false);
+  });
+
+  it("handles play() returning non-promise in HTMLAudioElement fallback", async () => {
+    vi.stubGlobal("AudioContext", undefined);
+    vi.stubGlobal("webkitAudioContext", undefined);
+
+    vi.stubGlobal(
+      "Audio",
+      vi.fn(function (this: Record<string, unknown>) {
+        Object.assign(this, {
+          play: vi.fn().mockReturnValue(undefined),
+          onended: null,
+          onerror: null,
+        });
+        return this;
+      }),
+    );
+
+    const onPlaying = vi.fn();
+    await speakWithOpenAI("Hello", "en", onPlaying);
+    expect(onPlaying).toHaveBeenCalledWith(false);
+  });
+
+  it("reuses cached AudioContext on subsequent calls", async () => {
+    const mockCtx = {
+      state: "running",
+      resume: vi.fn().mockResolvedValue(undefined),
+      decodeAudioData: vi.fn((_buffer: ArrayBuffer, success: (buffer: AudioBuffer) => void) => {
+        success({} as AudioBuffer);
+      }),
+      createBufferSource: vi.fn(() => mockSource),
+      destination: {},
+    };
+
+    vi.stubGlobal(
+      "AudioContext",
+      // biome-ignore lint/complexity/useArrowFunction: needs constructor for `new AudioContext()`
+      vi.fn(function () {
+        return mockCtx;
+      }),
+    );
+
+    await speakWithOpenAI("First", "en");
+    await speakWithOpenAI("Second", "en");
+    expect(mockCtx.decodeAudioData).toHaveBeenCalledTimes(2);
+  });
+
+  it("resumes suspended AudioContext before playback", async () => {
+    const resumeMock = vi.fn().mockResolvedValue(undefined);
+    const mockCtx = {
+      state: "suspended",
+      resume: resumeMock,
+      decodeAudioData: vi.fn((_buffer: ArrayBuffer, success: (buffer: AudioBuffer) => void) => {
+        success({} as AudioBuffer);
+      }),
+      createBufferSource: vi.fn(() => mockSource),
+      destination: {},
+    };
+
+    vi.stubGlobal(
+      "AudioContext",
+      // biome-ignore lint/complexity/useArrowFunction: needs constructor for `new AudioContext()`
+      vi.fn(function () {
+        return mockCtx;
+      }),
+    );
+
+    await speakWithOpenAI("Hello", "en");
+    expect(resumeMock).toHaveBeenCalledOnce();
   });
 });

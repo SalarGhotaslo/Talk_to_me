@@ -15,13 +15,13 @@ type VoiceConfig = {
 };
 
 const VOICE_CONFIGS: Record<string, VoiceConfig> = {
-  en: { model: "tts-1", voice: "fable", speed: 1.0 },
-  sv: { model: "tts-1-hd", voice: "echo", speed: 0.9 },
-  fa: { model: "tts-1-hd", voice: "echo", speed: 0.9 },
-  es: { model: "tts-1-hd", voice: "echo", speed: 0.9 },
-  tr: { model: "tts-1-hd", voice: "echo", speed: 0.9 },
-  fr: { model: "tts-1-hd", voice: "echo", speed: 0.9 },
-  nl: { model: "tts-1-hd", voice: "echo", speed: 0.9 },
+  en: { model: "tts-1-hd", voice: "fable", speed: 1.0 },
+  sv: { model: "tts-1-hd", voice: "alloy", speed: 0.9 },
+  fa: { model: "tts-1-hd", voice: "alloy", speed: 0.9 },
+  es: { model: "tts-1-hd", voice: "alloy", speed: 0.9 },
+  tr: { model: "tts-1-hd", voice: "alloy", speed: 0.9 },
+  fr: { model: "tts-1-hd", voice: "nova", speed: 0.9 },
+  nl: { model: "tts-1-hd", voice: "alloy", speed: 0.9 },
 };
 
 export async function POST(req: Request): Promise<Response> {
@@ -52,7 +52,7 @@ export async function POST(req: Request): Promise<Response> {
       },
       body: JSON.stringify({
         model: config.model,
-        input: prepareForTTS(parsed.data.text),
+        input: prepareForTTS(parsed.data.text, parsed.data.language),
         voice: config.voice,
         response_format: "mp3",
         speed: config.speed,

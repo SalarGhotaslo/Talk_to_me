@@ -3,7 +3,7 @@ import type { Language } from "@/types";
 const LANG_BCP47: Record<Language, string> = {
   en: "en-US",
   sv: "sv-SE",
-  fa: "fa-IR",
+  fa: "fa",
   es: "es-ES",
   tr: "tr-TR",
   fr: "fr-FR",
@@ -71,9 +71,22 @@ export function unlockAudio(): void {
 }
 
 const SENTENCE_END = /([.!?])(\s)/g;
+const COMMA = /(,)(\s)/g;
+const COLON = /([:;])(\s)/g;
+const ELLIPSIS = /(…)(\s)/g;
+const EM_DASH = /(—)(\s)/g;
 
-export function prepareForTTS(text: string): string {
-  return text.trim().replace(SENTENCE_END, "$1   ");
+export function prepareForTTS(text: string, language?: string): string {
+  if (language === "en") {
+    return text.trim().replace(SENTENCE_END, "$1   ");
+  }
+  return text
+    .trim()
+    .replace(SENTENCE_END, "$1          ")
+    .replace(ELLIPSIS, "$1          ")
+    .replace(COLON, "$1        ")
+    .replace(COMMA, "$1      ")
+    .replace(EM_DASH, "$1      ");
 }
 
 export function startListening(

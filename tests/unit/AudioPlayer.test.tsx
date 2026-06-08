@@ -182,4 +182,15 @@ describe("AudioPlayer", () => {
     await act(async () => {});
     expect(onSpeakingChange).toHaveBeenCalledWith(false);
   });
+
+  it("handles browser speak failure gracefully", async () => {
+    vi.mocked(speakWithOpenAI).mockRejectedValue(new Error("TTS API error"));
+    vi.mocked(speak).mockRejectedValue(new Error("Browser TTS error"));
+    const messages = [makeMsg("1", "assistant", "Hello")];
+    await act(async () => {
+      render(<AudioPlayer messages={messages} language="en" isStreaming={false} />);
+    });
+    await act(async () => {});
+    expect(speak).toHaveBeenCalledWith("Hello", "en", undefined);
+  });
 });

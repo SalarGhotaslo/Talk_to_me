@@ -37,7 +37,7 @@ export function ConversationView({ messages, isSpeaking }: Props) {
       aria-label="Conversation history"
       aria-live="polite"
       aria-relevant="additions"
-      className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+      className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 min-h-0"
     >
       {messages.map((message, i) =>
         message.role === "user" ? (
