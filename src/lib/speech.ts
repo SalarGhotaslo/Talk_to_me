@@ -143,7 +143,13 @@ export function startListening(
     onEnd();
   };
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch {
+    clearTimer();
+    onEnd();
+    return () => {};
+  }
 
   return () => {
     clearTimer();

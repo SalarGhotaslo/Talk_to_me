@@ -195,7 +195,7 @@ export default function Home() {
       if (silenceTimer) clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         recognition.stop();
-      }, 1200);
+      }, 2500);
     };
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
@@ -231,8 +231,13 @@ export default function Home() {
       setState((prev) => ({ ...prev, recordingState: "idle" }));
     };
 
+    try {
+      recognition.start();
+    } catch {
+      setState((prev) => ({ ...prev, recordingState: "idle" }));
+      return;
+    }
     recognitionRef.current = recognition;
-    recognition.start();
     setState((prev) => ({ ...prev, recordingState: "recording" }));
   }, [state.language, state.recordingState, sendMessage]);
 
